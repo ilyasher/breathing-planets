@@ -37,7 +37,7 @@ SRCS = src/%.c lib/%.c
 # with the .o suffix
 #
 # OBJS = $(SRCS:.c=.o)
-LIBOBJS = obj/libattopng.o obj/noise.o
+LIBOBJS = obj/libattopng.o obj/noise.o obj/gifenc.o
 OBJS = $(LIBOBJS) obj/animated_terminal.o obj/img_test.o
 
 #
@@ -77,6 +77,8 @@ obj/%.o: src/%.c
 obj/libattopng.o: lib/libattopng.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 obj/noise.o: lib/noise.c
+	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
+obj/gifenc.o: lib/gifenc.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 
 clean:
