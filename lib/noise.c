@@ -63,3 +63,10 @@ double noise3(double x, double y, double z) {
                              lerp(u, grad(p[AB+1], x  , y-1, z-1 ),
                                      grad(p[BB+1], x-1, y-1, z-1 ))));
    }
+
+double noise3_grad_z(double x, double y, double z) {
+    double delta = 1e-6;
+    double p1 = noise3(x, y, z-delta);
+    double p2 = noise3(x, y, z+delta);
+    return (p2 - p1) / (2 * delta);
+}
