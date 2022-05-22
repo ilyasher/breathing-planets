@@ -20,6 +20,7 @@
 double r = 0.45;
 double noise_amp = 0.1;
 
+// Simplex noise added up at a few octaves
 double noise(double x, double y, double z, double t) {
     double power = 1;
     double n = 0;
@@ -27,13 +28,12 @@ double noise(double x, double y, double z, double t) {
         n += power * noise4(x*freq, y*freq, z*freq, t);
         power /= 2;
     }
-    // n /= (power - 1);
-
-    // n += 0.1;
-    n *= 0.5 * sqrt(fabs(n));
+    n *= 0.5 * sqrt(fabs(n)); // makes the shape a little bit spikier
     return n;
 }
 
+
+// Note: we might remove
 double noise_grad_z(double x, double y, double z, double t) {
     double delta = 1e-6;
     double p1 = noise(x, y, z-delta, t);
@@ -41,10 +41,13 @@ double noise_grad_z(double x, double y, double z, double t) {
     return (p2 - p1) / (2 * delta);
 }
 
+// the function we want to find the zero of.
+// If f(x, y, z, t) = 0, then (x, y, z) is at the planet's surface at time t
 double f(double x, double y, double z, double t) {
     return x*x+y*y+z*z-(pow(r+noise_amp*noise(x,y,z,t), 2));
 }
 
+// Numerical derivatives
 double f_grad_x(double x, double y, double z, double t) {
     double delta = 1e-6;
     double p1 = f(x-delta, y, z, t);
@@ -66,10 +69,14 @@ double f_grad_z(double x, double y, double z, double t) {
     return (p2 - p1) / (2 * delta);
 }
 
+
+// Note: f_grad_z does essentially the same thing
 double f_prime(double x, double y, double z, double t) {
     return 2*z-2*(r+noise_amp*noise(x, y, z, t))*noise_amp*noise_grad_z(x, y, z, t);
 }
 
+// Given x, y, find which z is at the planet's surface
+// (try find z such that f(x, y, z, t) = 0)
 double find_z(double x, double y, double z, double t) {
     // double highest_z = -0.5;
     double highest_z = 1000;
@@ -87,6 +94,8 @@ double find_z(double x, double y, double z, double t) {
 
     return highest_z;
 }
+
+// Faster but worse
 // double find_z(double x, double y, double z) {
 //     double new_z = z + 0.1;
 //     for (int i = 0; i < 8; i++) {
@@ -95,6 +104,7 @@ double find_z(double x, double y, double z, double t) {
 //     return new_z;
 // }
 
+// Do the raytracing for every x, y and fill z values in zs
 void make_zs(double zs[H][W], uint8_t zs_valid[H][W], double t) {
     for (int i = 0; i < H; i++) {
         for (int j = 0; j < W; j++) {
@@ -108,11 +118,12 @@ void make_zs(double zs[H][W], uint8_t zs_valid[H][W], double t) {
             z = find_z(x, y, z, t);
             zs[i][j] = z;
             zs_valid[i][j] = (fabs(f(x, y, z, t)) < 1e-3);
-            // zs_valid[i][j] = 1;
         }
     }
 }
 
+// For invalid locations that have valid neighbors,
+// replace them with the average of the valid neighbors.
 void fill_holes(double zs[H][W], uint8_t v[H][W]) {
 
     uint8_t new_valid[H][W];
@@ -142,6 +153,8 @@ void fill_holes(double zs[H][W], uint8_t v[H][W]) {
     memcpy(v, new_valid, H*W);
 }
 
+
+// Return number 0-1 representing how much lighting the point has.
 double lighting(double x, double y, double z, double t, int flat) {
     // double lx = sin(t);
     // double lz = cos(t);
@@ -244,45 +257,54 @@ void fill_texture_gif(uint8_t *pixels, double zs[H][W], uint8_t zs_valid[H][W], 
 
 int main(int argc, char *argv[])
 {
+    int do_gif = 1;
 
-    /*
-    libattopng_t *png = libattopng_new(W, H, PNG_RGB);
+    // Array of z positions for every x, y
     double zs[H][W];
-    uint8_t zs_valid[H][W];
-    double t = 1;
-    make_zs(zs, zs_valid, t);
-    fill_holes(zs, zs_valid);
-    fill_texture_png(png, zs, zs_valid, t);
-    libattopng_save(png, "test_rgb_heights.png");
-    libattopng_destroy(png);
-	return 0;
-    */
 
-    ge_GIF *gif = ge_new_gif(
-        "test_rgb.gif", W, H,
-       palette, 8, -1, 1
-    );
-    double zs[H][W];
+    // Array of whether z position is valid for every x, y
+    // Invalid z positions occur either when the x, y corresponds to
+    // outer space, or when the raytracing messes up.
     uint8_t zs_valid[H][W];
 
-    uint8_t *pixels = malloc(W*H*sizeof(uint8_t));
-    memset(pixels, 0, W*H*sizeof(uint8_t));
-    // make_zs(zs, zs_valid, 0);
-    // fill_holes(zs, zs_valid);
 
-    for (int f = 0; f < 20; f++) {
-        printf("%d/20\n", f);
-        double t = f / 40.;
+    if (!do_gif) {
+        libattopng_t *png = libattopng_new(W, H, PNG_RGB);
 
+        double t = 1; // arbitrary
         make_zs(zs, zs_valid, t);
         fill_holes(zs, zs_valid);
-        fill_texture_gif(pixels, zs, zs_valid, t);
-
-        memcpy(gif->frame, pixels, W*H*sizeof(uint8_t));
-        ge_add_frame(gif, 10);
+        fill_texture_png(png, zs, zs_valid, t);
+        libattopng_save(png, "test_rgb_heights.png");
+        libattopng_destroy(png);
+        return 0;
     }
-    ge_close_gif(gif);
-    free(pixels);
+    else {
+
+        ge_GIF *gif = ge_new_gif(
+            "test_rgb.gif", W, H,
+            palette, 8, -1, 1);
+
+        // pixels contains the palette index of each x, y of the frame.
+        uint8_t *pixels = malloc(W*H*sizeof(uint8_t));
+        memset(pixels, 0, W*H*sizeof(uint8_t));
+
+        int n_frames = 20;
+        for (int f = 0; f < n_frames; f++) {
+            printf("%d/%d\n", f, n_frames);
+            double t = f / 40.;
+
+            make_zs(zs, zs_valid, t);
+            fill_holes(zs, zs_valid);
+            fill_texture_gif(pixels, zs, zs_valid, t);
+
+            // Necessary to do for every frame separately
+            memcpy(gif->frame, pixels, W*H*sizeof(uint8_t));
+            ge_add_frame(gif, 10);
+        }
+        ge_close_gif(gif);
+        free(pixels);
+    }
 
 	return 0;
 }
