@@ -38,7 +38,7 @@ SRCS = src/%.c lib/%.c
 #
 # OBJS = $(SRCS:.c=.o)
 LIBOBJS = obj/libattopng.o obj/noise.o obj/gifenc.o
-OBJS = $(LIBOBJS) obj/animated_terminal.o obj/img_test.o
+OBJS = $(LIBOBJS) obj/mars.o obj/earth.o obj/planet_graphics.o obj/palette.o
 
 #
 # The following part of the makefile is generic; it can be used to
@@ -54,11 +54,11 @@ all: terminal imgtest
 terminal: bin/animated_terminal
 imgtest: bin/img_test
 
-bin/animated_terminal: $(LIBOBJS) obj/animated_terminal.o
-	$(CC) $(CFLAGS) $(INCLUDES) -o bin/animated_terminal $(LIBOBJS) obj/animated_terminal.o $(LFLAGS) $(LIBS)
+bin/animated_terminal: $(OBJS) obj/animated_terminal.o
+	$(CC) $(CFLAGS) $(INCLUDES) -o bin/animated_terminal $(OBJS) obj/animated_terminal.o $(LFLAGS) $(LIBS)
 
-bin/img_test: $(LIBOBJS) obj/img_test.o
-	$(CC) $(CFLAGS) $(INCLUDES) -o bin/img_test $(LIBOBJS) obj/img_test.o $(LFLAGS) $(LIBS)
+bin/img_test: $(OBJS) obj/img_test.o
+	$(CC) $(CFLAGS) $(INCLUDES) -o bin/img_test $(OBJS) obj/img_test.o $(LFLAGS) $(LIBS)
 
 # this is a suffix replacement rule for building .o's from .c's
 # it uses automatic variables $<: the name of the prerequisite of
@@ -80,6 +80,12 @@ obj/noise.o: lib/noise.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 obj/gifenc.o: lib/gifenc.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
+# obj/earth.o: src/earth.c
+# 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
+# obj/mars.o: src/mars.c
+# 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
+# obj/planet_graphics.o: src/planet_graphics.c
+# 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 
 clean:
 	$(RM) obj/*.o *~ $(MAIN)
