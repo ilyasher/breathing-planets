@@ -16,8 +16,8 @@
 
 #define ALPHA(c, a) ((c) | ((a) << 8))
 
-#define W 128
-#define H 128
+#define W 512
+#define H 512
 
 typedef struct vec3_t {
     float x;
@@ -106,18 +106,31 @@ void make_zs(float zs[H][W], uint8_t zs_valid[H][W], float t) {
     }
 }
 
+vec3_t lp = {-7, 2, 7};
+
 // Return number 0-1 representing how much lighting the point has.
 float lighting(float x, float y, float z, float t) {
-    // float lx = sin(t);
-    // float lz = cos(t);
-    float lx = -0.7;
-    float ly = 0.2;
-    float lz = 0.7;
+
+    vec3_t ray = lp;
+    vec3_t ld = {x-lp.x, y-lp.y, z-lp.z};
+    normalize(&ld);
+    for (int i = 0; i < 16; i++) {
+        float dist = sdf(ray.x, ray.y, ray.z, t);
+        ray.x += dist*ld.x;
+        ray.y += dist*ld.y;
+        ray.z += dist*ld.z;
+    }
+    float dist = sqrt((ray.x-x)*(ray.x-x)+(ray.y-y)*(ray.y-y)+(ray.z-z)*(ray.z-z));
+    // printf("%f, %f, %f\n", dist, sdf(ray.x, ray.y, ray.z, t), sdf(x, y, z, t));
+    if (dist > 1e-2) {
+        // In the shadow
+        return 0.1;
+    }
 
     vec3_t grad;
     grad_sdf(&grad, x, y, z, t);
 
-    float l = lx*grad.x + ly*grad.y + lz*grad.z;
+    float l = -ld.x*grad.x - ld.y*grad.y - ld.z*grad.z;
     l = l > 0 ? l : 0;
 
     return 0.1 + 0.9 * l;
@@ -217,7 +230,7 @@ int main(int argc, char *argv[])
         float t = 0; // arbitrary
         make_zs(zs, zs_valid, t);
         fill_texture_png(png, zs, zs_valid, t);
-        libattopng_save(png, "test_rgb_heights.png");
+        libattopng_save(png, "test_rgb_heights_shadows.png");
         libattopng_destroy(png);
         return 0;
     }
