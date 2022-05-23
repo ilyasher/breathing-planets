@@ -13,7 +13,7 @@
 #include "planet_graphics.h"
 
 void usage(char *progname) {
-    printf("usage: %s out_file [--mars] [--earth] [-w <width>] [-h <height>] [--gif <n_frames>]\n"
+    printf("usage: %s out_file [--mars] [--earth] [-w <width>] [-h <height>] [--gif <n_frames>] [--seed <seed>]\n"
            "example: %s mars_movie.gif --mars -w 512 -h 512 --gif 64\n", progname, progname);
     exit(1);
 }
@@ -43,6 +43,9 @@ int main(int argc, char *argv[])
             do_gif = 1;
             i++;
             n_frames = atoi(argv[i]);
+        } else if (!strcmp(argv[i], "--seed")) {
+            i++;
+            seed = atoi(argv[i]); // declared in planet_graphics.h
         } else {
             if (!filename_found) {
                 filename_found = 1;
@@ -101,11 +104,8 @@ int main(int argc, char *argv[])
             memcpy(gif->frame, pixels, width*height*sizeof(uint8_t));
             ge_add_frame(gif, 10);
         }
-        printf("got here 1\n");
         ge_close_gif(gif);
-        printf("got here 2\n");
         free(pixels);
-        printf("got here 3\n");
     }
     free(zs);
     free(zs_valid);

@@ -2,6 +2,7 @@
 
 #include "earth.h"
 #include "planet_graphics.h"
+#include "noise.h"
 #include "palette.h"
 
 float earth_height_function(float n) {
@@ -20,7 +21,7 @@ int earth_color_function(float x, float y, float z, float t, int is_png) {
         int c = 48 + (int)(n*64);
         return BLUE_TABLE[CAPAT((int)(c*light), 0, 63)];
     }
-    if (n < EARTH_SNOW_LEVEL) {
+    if (n + fabs(y / 10) + 0.01 * noise4(256*x,256*y,256*z,t) < EARTH_SNOW_LEVEL) {
         if (is_png) {
             int c = CAPAT((light * (100 + (int)(n*3000))), 0, 255);
             return RGB(0, c, 0);

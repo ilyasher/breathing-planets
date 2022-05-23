@@ -26,13 +26,14 @@ vec3_t lp = {-7, 2, 7};
 float water_level = -1;
 float (*height_function)(float) = mars_height_function;
 int   (*color_function)(float, float, float, float, int) = mars_color_function;
+float seed = 0;
 
 // Simplex noise added up at a few octaves
 float noise(float x, float y, float z, float t) {
 
     float x_rot = x*cos(rotation_freq * t) - z*sin(rotation_freq * t);
     float z_rot = x*sin(rotation_freq * t) + z*cos(rotation_freq * t);
-    float y_rot = y;
+    float y_rot = y + seed;
 
     float power = 1;
     float n = 0;

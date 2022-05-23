@@ -21,6 +21,7 @@ void normalize(vec3_t* v);
 extern float water_level;
 extern float (*height_function)(float);
 extern int   (*color_function)(float, float, float, float, int);
+extern float seed;
 
 // Functions relating to planet generation
 
