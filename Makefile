@@ -52,13 +52,13 @@ all: terminal imgtest
 	@echo "Simple compiler named mycc has been compiled"
 
 terminal: bin/animated_terminal
-imgtest: bin/img_test
+imgtest: bin/render_planet
 
 bin/animated_terminal: $(OBJS) obj/animated_terminal.o
 	$(CC) $(CFLAGS) $(INCLUDES) -o bin/animated_terminal $(OBJS) obj/animated_terminal.o $(LFLAGS) $(LIBS)
 
-bin/img_test: $(OBJS) obj/img_test.o
-	$(CC) $(CFLAGS) $(INCLUDES) -o bin/img_test $(OBJS) obj/img_test.o $(LFLAGS) $(LIBS)
+bin/render_planet: $(OBJS) obj/main.o
+	$(CC) $(CFLAGS) $(INCLUDES) -o bin/render_planet $(OBJS) obj/main.o $(LFLAGS) $(LIBS)
 
 # this is a suffix replacement rule for building .o's from .c's
 # it uses automatic variables $<: the name of the prerequisite of
@@ -69,23 +69,12 @@ bin/img_test: $(OBJS) obj/img_test.o
 obj/%.o: src/%.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 
-# obj/animated_terminal.o: src/animated_terminal.c
-# 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
-# obj/img_test.o: src/img_test.c
-# 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
-
 obj/libattopng.o: lib/libattopng.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 obj/noise.o: lib/noise.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 obj/gifenc.o: lib/gifenc.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
-# obj/earth.o: src/earth.c
-# 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
-# obj/mars.o: src/mars.c
-# 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
-# obj/planet_graphics.o: src/planet_graphics.c
-# 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 
 clean:
 	$(RM) obj/*.o *~ $(MAIN)

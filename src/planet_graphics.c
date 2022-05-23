@@ -14,13 +14,16 @@
 #include "planet_graphics.h"
 
 float HEIGHT_AMP = 0.1;
-float WATER_LEVEL = -1;
+
 // float WATER_LEVEL = -0.005;
 
 float rotation_freq = -0.7;
 
 vec3_t lp = {-7, 2, 7};
 
+#define INDEX(i, j, W) ((i) * (W) + (j))
+
+float water_level = -1;
 float (*height_function)(float) = mars_height_function;
 int   (*color_function)(float, float, float, float, int) = mars_color_function;
 
@@ -34,7 +37,7 @@ float noise(float x, float y, float z, float t) {
     float power = 1;
     float n = 0;
     for (int freq = 2; freq < 256; freq *= 2) {
-        n += power * noise4(x_rot*freq, y_rot*freq, z_rot*freq, 0);
+        n += power * noise4(x_rot*freq, y_rot*freq, z_rot*freq, t);
         power /= 2.2;
     }
 
@@ -51,7 +54,7 @@ float surface_height(float x, float y, float z, float t) {
 float sdf(float x, float y, float z, float t) {
     float norm = sqrt(x*x+y*y+z*z);
     float h = surface_height(x, y, z, t);
-    return norm - (R + (h > WATER_LEVEL ? h : WATER_LEVEL));
+    return norm - (R + (h > water_level ? h : water_level));
 }
 
 void normalize(vec3_t* v) {
@@ -80,24 +83,6 @@ float ray_march_z(float x, float y, float z, float t) {
         z = z - sdf(x, y, z, t);
     }
     return z;
-}
-
-// Do the raytracing for every x, y and fill z values in zs
-void make_zs(float zs[H][W], uint8_t zs_valid[H][W], float t) {
-    for (int i = 0; i < H; i++) {
-        for (int j = 0; j < W; j++) {
-            float x = (j - W/2)/(float)H;
-            float y = (i - H/2)/(float)H;
-            float rrxxyy = R*R-x*x+y*y;
-            float z = 0;
-            if (rrxxyy > 0) {
-                z = sqrt(rrxxyy);
-            }
-            z = ray_march_z(x, y, z, t);
-            zs[i][j] = z;
-            zs_valid[i][j] = (fabs(sdf(x, y, z, t)) < 1e-2);
-        }
-    }
 }
 
 // Return number 0-1 representing how much lighting the point has.
@@ -132,25 +117,43 @@ float lighting(float x, float y, float z, float t) {
     return ambient + 0.9 * diffuse;
 }
 
-void fill_texture(void *pixels, float zs[H][W], uint8_t zs_valid[H][W], float t, int is_png) {
+// Do the raytracing for every x, y and fill z values in zs
+void make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t) {
     for (int i = 0; i < H; i++) {
         for (int j = 0; j < W; j++) {
-            if (!zs_valid[i][j]) {
+            float x = (j - W/2)/(float)H;
+            float y = (i - H/2)/(float)H;
+            float rrxxyy = R*R-x*x+y*y;
+            float z = 0;
+            if (rrxxyy > 0) {
+                z = sqrt(rrxxyy);
+            }
+            z = ray_march_z(x, y, z, t);
+            zs[INDEX(i, j, W)] = z;
+            zs_valid[INDEX(i, j, W)] = (fabs(sdf(x, y, z, t)) < 1e-2);
+        }
+    }
+}
+
+void fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, float t, int is_png) {
+    for (int i = 0; i < H; i++) {
+        for (int j = 0; j < W; j++) {
+            if (!zs_valid[INDEX(i, j, W)]) {
                 if (is_png) {
                     libattopng_set_pixel((libattopng_t *) pixels, j, i, RGB(0, 0, 0));
                 } else {
-                    ((uint8_t *)pixels)[i*H+j] = BLACK;
+                    ((uint8_t *)pixels)[i*W+j] = BLACK;
                 }
                 continue;
             }
             float x = (j - W/2)/(float)H;
             float y = (i - H/2)/(float)H;
-            float z = zs[i][j];
+            float z = zs[INDEX(i, j, W)];
             int color = color_function(x, y, z, t, is_png);
             if (is_png) {
                 libattopng_set_pixel((libattopng_t *) pixels, j, i, color);
             } else {
-                ((uint8_t *)pixels)[i*H+j] = color;
+                ((uint8_t *)pixels)[i*W+j] = color;
             }
         }
     }
