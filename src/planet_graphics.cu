@@ -22,8 +22,13 @@
 #define HEIGHT_AMP 0.1
 
 #define R 0.45
+#define RGBA(r, g, b, a) ((r) | ((g) << 8) | ((b) << 16) | ((a) << 24))
+#define RGB(r, g, b) RGBA(r, g, b, 0xff)
+#define CAPAT(c, min, max) ((c) < (min) ? (min) : ((c) > (max) ? (max) : (c)))
 
 #define WATER_LEVEL -0.005
+#define EARTH_WATER_LEVEL WATER_LEVEL
+#define EARTH_SNOW_LEVEL 0.05
 
 #define ROTATION_FREQ -0.7
 
@@ -145,15 +150,15 @@ __device__ static float gpu_noise4( float x, float y, float z, float w )
     return 0.87f * ( LERP( s, n0, n1 ) );
 }
 
-/*
+
 typedef struct vec3_t {
     float x;
     float y;
     float z;
 } vec3_t;
 
-vec3_t lp = {-7, 2, 7};
-*/
+__device__ static vec3_t lp = {-.7, .2, .7};
+
 
 #define INDEX(i, j, W) ((i) * (W) + (j))
 
@@ -193,28 +198,26 @@ __device__ static float gpu_sdf(float x, float y, float z, float t) {
     return norm - (R + (h > WATER_LEVEL ? h : WATER_LEVEL));
 }
 
-/*
-void normalize(vec3_t* v) {
+
+__device__ static void gpu_normalize(vec3_t* v) {
     float norm = sqrt(v->x*v->x + v->y*v->y + v->z*v->z);
     v->x /= norm;
     v->y /= norm;
     v->z /= norm;
 }
-*/
 
-/*
-void grad_sdf(vec3_t *grad, float x, float y, float z, float t) {
+
+__device__ static void gpu_grad_sdf(vec3_t *grad, float x, float y, float z, float t) {
     float delta = 1e-3;
-    float p0 = sdf(x, y, z, t);
-    float px = sdf(x+delta, y, z, t);
-    float py = sdf(x, y+delta, z, t);
-    float pz = sdf(x, y, z+delta, t);
+    float p0 = gpu_sdf(x, y, z, t);
+    float px = gpu_sdf(x+delta, y, z, t);
+    float py = gpu_sdf(x, y+delta, z, t);
+    float pz = gpu_sdf(x, y, z+delta, t);
     grad->x = (px - p0) / delta;
     grad->y = (py - p0) / delta;
     grad->z = (pz - p0) / delta;
-    normalize(grad);
+    gpu_normalize(grad);
 }
-*/
 
 // Given x, y, find which z is at the planet's surface
 // (try find z such that f(x, y, z, t) = 0)
@@ -225,54 +228,84 @@ __device__ static float gpu_ray_march_z(float x, float y, float z, float t) {
     return z;
 }
 
-/*
-// Return number 0-1 representing how much lighting the point has.
-float lighting(float x, float y, float z, float t) {
+#define AMBIENT 0.1
 
-    float ambient = 0.1;
+// Return number 0-1 representing how much lighting the point has.
+__device__ static float gpu_lighting(float x, float y, float z, float t) {
 
     vec3_t ray = {lp.x * cos(t), lp.y, lp.z -14*sin(t)};
     vec3_t ld = {x-ray.x, y-ray.y, z-ray.z};
-    normalize(&ld);
+    gpu_normalize(&ld);
     for (int i = 0; i < 32; i++) {
-        float dist = sdf(ray.x, ray.y, ray.z, t);
+        float dist = gpu_sdf(ray.x, ray.y, ray.z, t);
         ray.x += dist*ld.x;
         ray.y += dist*ld.y;
         ray.z += dist*ld.z;
     }
-    float dist = sqrt((ray.x-x)*(ray.x-x)+(ray.y-y)*(ray.y-y)+(ray.z-z)*(ray.z-z));
-    if (dist > 1e-2) {
+    if ((ray.x-x)*(ray.x-x)+(ray.y-y)*(ray.y-y)+(ray.z-z)*(ray.z-z) > 1e-4) {
         // In the shadow
-        return ambient;
+        return AMBIENT;
     }
 
     vec3_t grad;
-    grad_sdf(&grad, x, y, z, t);
+    gpu_grad_sdf(&grad, x, y, z, t);
+    // float delta = 1e-3;
+    // float p0 = gpu_sdf(1, 0, 0, 0);
+    // float p0 = gpu_sdf(ray.x, ray.y, ray.z, t);
+    // float p0 = gpu_sdf(x, y, z, t);
+    // float px = gpu_sdf(x+delta, y, z, t);
+    // float py = gpu_sdf(x, y+delta, z, t);
+    // float pz = gpu_sdf(x, y, z+delta, t);
+    // grad.x = (px - p0) / delta;
+    // grad.y = (py - p0) / delta;
+    // grad.z = (pz - p0) / delta;
+    // gpu_normalize(&grad);
 
     float diffuse = -ld.x*grad.x - ld.y*grad.y - ld.z*grad.z;
     diffuse = diffuse > 0 ? diffuse : 0;
 
-    // float specular = grad.z > 0 ? grad.z : 0;
-    // specular = pow(specular, 256);
+    float specular = grad.z > 0 ? grad.z : 0;
+    specular = pow(specular, 256);
 
-    return ambient + 0.9 * diffuse;
+    return AMBIENT + 0.9 * diffuse;
 }
-*/
+
+__device__ static int gpu_earth_color_function(float x, float y, float z, float t, int is_png) {
+    // float light = gpu_lighting(x, y, z, t);
+
+    float light = 1;
+    float n = gpu_surface_height(x, y, z, t);
+
+    if (n < EARTH_WATER_LEVEL) {
+        if (is_png) {
+            int c = CAPAT((48+n*64) * light, 0, 255);
+            return RGB(c, c,  (int) (255*light));
+        }
+        // int c = 48 + (int)(n*64);
+        // return BLUE_TABLE[CAPAT((int)(c*light), 0, 63)];
+    }
+    if (n + fabs(y / 10) + 0.01 * gpu_noise4(256*x,256*y,256*z,t) < EARTH_SNOW_LEVEL) {
+        if (is_png) {
+            int c = CAPAT((light * (100 + (int)(n*3000))), 0, 255);
+            return RGB(0, c, 0);
+        }
+        // int c = 16+(int)(n*96);
+        // return GREEN_TABLE[CAPAT((int)(c*light), 0, 63)];
+    } else {
+        if (is_png) {
+            int c = CAPAT((light * (100 + (int)(n*3000))), 0, 255);
+            return RGB(c, c, c);
+        }
+        // int c = 63;
+        // return GREY_TABLE[(int)(c*light)];
+    }
+    return RGB(255, 0, 0);
+}
 
 
 __global__ void make_zs_kernel(float *d_zs, uint8_t *d_zs_valid, int W, int H, float t) {
-
-    // unsigned idx = blockIdx.x * blockDim.x + threadIdx.x;
-    // unsigned tid = threadIdx.x;
-
-    // for (; idx < n; idx += blockDim.x * gridDim.x)
-    // {
-    //     unsigned idx_curr = idx * c * h * w;
-    // }
-
     int i = threadIdx.x + 32 * blockIdx.x;
     int j = threadIdx.y + 32 * blockIdx.y;
-
 
     float x = (j - W/2)/(float)H;
     float y = (i - H/2)/(float)H;
@@ -289,57 +322,82 @@ __global__ void make_zs_kernel(float *d_zs, uint8_t *d_zs_valid, int W, int H, f
 
 // Do the raytracing for every x, y and fill z values in zs
 void cuda_make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t) {
-    // Inialize loss on the device to be zero
     float   *d_zs;
     uint8_t *d_zs_valid;
     CUDA_CALL( cudaMalloc(&d_zs, W*H*sizeof(float)) );
     CUDA_CALL( cudaMalloc(&d_zs_valid, W*H*sizeof(uint8_t)) );
-    // cudaMalloc(&d_zs, W*H*sizeof(float));
-    // cudaMalloc(&d_zs_valid, W*H*sizeof(uint8_t));
 
     dim3 blockSize(32, 32);
     dim3 gridSize(W / 32, H / 32); // TODO: check
-    // naiveTransposeKernel<<<gridSize, blockSize>>>(d_input, d_output, n);
-
-    // // Accumulate the total loss on the device by invoking a kernel
-    // int n_blocks = std::min(65535, (n * c * h * w + BW  - 1) / BW);
 
     make_zs_kernel<<<gridSize, blockSize>>>(d_zs, d_zs_valid, W, H, t);
 
-    // Copy back the accumulated loss on the device back to the host
     CUDA_CALL( cudaMemcpy(zs, d_zs, W*H*sizeof(float), cudaMemcpyDeviceToHost) );
     CUDA_CALL( cudaMemcpy(zs_valid, d_zs_valid, W*H*sizeof(uint8_t), cudaMemcpyDeviceToHost) );
     CUDA_CALL( cudaFree(d_zs) );
     CUDA_CALL( cudaFree(d_zs_valid) );
-    // cudaMemcpy(zs, d_zs, W*H*sizeof(float), cudaMemcpyDeviceToHost);
-    // cudaMemcpy(zs_valid, d_zs_valid, W*H*sizeof(float), cudaMemcpyDeviceToHost);
-    // cudaFree(d_zs);
-    // cudaFree(d_zs_valid);
-
 }
 
-/*
-void fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, float t, int is_png) {
-    for (int i = 0; i < H; i++) {
-        for (int j = 0; j < W; j++) {
-            if (!zs_valid[INDEX(i, j, W)]) {
-                if (is_png) {
-                    libattopng_set_pixel((libattopng_t *) pixels, j, i, RGB(0, 0, 0));
-                } else {
-                    ((uint8_t *)pixels)[i*W+j] = BLACK;
-                }
-                continue;
-            }
-            float x = (j - W/2)/(float)H;
-            float y = (i - H/2)/(float)H;
-            float z = zs[INDEX(i, j, W)];
-            int color = color_function(x, y, z, t, is_png);
-            if (is_png) {
-                libattopng_set_pixel((libattopng_t *) pixels, j, i, color);
-            } else {
-                ((uint8_t *)pixels)[i*W+j] = color;
-            }
+
+__global__ void fill_texture_kernel(void *d_pixels, float *d_zs, uint8_t *d_zs_valid, int W, int H, float t, int is_png) {
+    int i = threadIdx.x + 32 * blockIdx.x;
+    int j = threadIdx.y + 32 * blockIdx.y;
+
+
+    if (!d_zs_valid[INDEX(i, j, W)]) {
+        if (is_png) {
+            ((uint32_t *) d_pixels)[INDEX(i, j, W)] = RGB(0, 0, 0);
+            // libattopng_set_pixel((libattopng_t *) pixels, j, i, RGB(0, 0, 0));
+        } else {
+            // ((uint8_t *) d_pixels)[i*W+j] = BLACK;
         }
+        return;
+    }
+
+    float x = (j - W/2)/(float)H;
+    float y = (i - H/2)/(float)H;
+    float z = d_zs[INDEX(i, j, W)];
+    int color = gpu_earth_color_function(x, y, z, t, is_png);
+
+    // ((uint32_t *) d_pixels)[INDEX(i, j, W)] = RGB(0, 0, 255);
+    // #define INDEX(i, j, W) ((i) * (W) + (j))
+    // ((uint32_t *) d_pixels)[j + i * W] = RGB(0, 255, 0);
+
+    // return;
+
+    if (is_png) {
+        ((uint32_t *) d_pixels)[j + i * W] = color;
+        // libattopng_set_pixel((libattopng_t *) pixels, j, i, color);
+    } else {
+        ((uint8_t *) d_pixels)[i*W+j] = color;
     }
 }
-*/
+
+void cuda_fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, float t, int is_png) {
+    float   *d_zs;
+    uint8_t *d_zs_valid;
+    CUDA_CALL( cudaMalloc(&d_zs, W*H*sizeof(float)) );
+    CUDA_CALL( cudaMalloc(&d_zs_valid, W*H*sizeof(uint8_t)) );
+    CUDA_CALL( cudaMemcpy(d_zs, zs, W*H*sizeof(float), cudaMemcpyHostToDevice) );
+    CUDA_CALL( cudaMemcpy(d_zs_valid, zs_valid, W*H*sizeof(uint8_t), cudaMemcpyHostToDevice) );
+
+    dim3 blockSize(32, 32);
+    dim3 gridSize(W / 32, H / 32);
+
+    if (is_png) {
+        uint32_t *d_pixels;
+        CUDA_CALL( cudaMalloc(&d_pixels, W*H*sizeof(uint32_t)) );
+        fill_texture_kernel<<<gridSize, blockSize>>>(d_pixels, d_zs, d_zs_valid, W, H, t, is_png);
+        CUDA_CALL( cudaMemcpy(pixels, d_pixels, W*H*sizeof(uint32_t), cudaMemcpyDeviceToHost) );
+        CUDA_CALL( cudaFree(d_pixels) );
+    } else {
+        uint8_t *d_pixels;
+        CUDA_CALL( cudaMalloc(&d_pixels, W*H*sizeof(uint8_t)) );
+        fill_texture_kernel<<<gridSize, blockSize>>>(d_pixels, d_zs, d_zs_valid, W, H, t, is_png);
+        CUDA_CALL( cudaMemcpy(pixels, d_pixels, W*H*sizeof(uint8_t), cudaMemcpyDeviceToHost) );
+        CUDA_CALL( cudaFree(d_pixels) );
+    }
+
+    CUDA_CALL( cudaFree(d_zs) );
+    CUDA_CALL( cudaFree(d_zs_valid) );
+}

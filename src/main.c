@@ -83,7 +83,8 @@ int main(int argc, char *argv[])
         float t = 0; // arbitrary
         cuda_make_zs(zs, zs_valid, width, height, t);
         // make_zs(zs, zs_valid, width, height, t);
-        fill_texture(png, zs, zs_valid, width, height, t, 1);
+        // fill_texture(png, zs, zs_valid, width, height, t, 1);
+        cuda_fill_texture(png->data, zs, zs_valid, width, height, t, 1);
         libattopng_save(png, filename);
         libattopng_destroy(png);
     }

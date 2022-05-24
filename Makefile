@@ -114,6 +114,8 @@ obj/libattopng.o: lib/libattopng.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 obj/noise.o: lib/noise.c
 	$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
+
+# MUST BE COMPILED AS C CODE (NOT C++)
 obj/gifenc.o: lib/gifenc.c
 	gcc -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 

@@ -53,5 +53,6 @@ void cuda_make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t);
 //                   int H,
 //                   float t,
 //                   int is_png);
+void cuda_fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, float t, int is_png);
 
 #endif // PLANET_GRAPHICS_CUH
