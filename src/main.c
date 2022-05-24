@@ -11,6 +11,7 @@
 #include "mars.h"
 #include "earth.h"
 #include "planet_graphics.h"
+#include "planet_graphics.cuh"
 
 void usage(char *progname) {
     printf("usage: %s out_file [--mars] [--earth] [-w <width>] [-h <height>] [--gif <n_frames>] [--seed <seed>]\n"
@@ -80,7 +81,8 @@ int main(int argc, char *argv[])
         libattopng_t *png = libattopng_new(width, height, PNG_RGB);
 
         float t = 0; // arbitrary
-        make_zs(zs, zs_valid, width, height, t);
+        cuda_make_zs(zs, zs_valid, width, height, t);
+        // make_zs(zs, zs_valid, width, height, t);
         fill_texture(png, zs, zs_valid, width, height, t, 1);
         libattopng_save(png, filename);
         libattopng_destroy(png);

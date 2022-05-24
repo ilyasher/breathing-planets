@@ -2,6 +2,7 @@
 #define PLANET_GRAPHICS_H
 
 #include <stdlib.h>
+#include <stdint.h>
 
 #define R 0.45
 

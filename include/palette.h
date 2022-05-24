@@ -2,6 +2,7 @@
 #define PALETTE_H
 
 #include <stdlib.h>
+#include <stdint.h>
 
 extern const uint8_t BLACK;
 extern const uint8_t WHITE;
