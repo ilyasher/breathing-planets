@@ -1,6 +1,6 @@
 # breathing-planets
 
-A terrain generator and raytracer for making planet renders. The program can make GIFS of the planets changing over time.
+A terrain generator and raytracer for making planet renders. The program can make GIFs of the planets changing over time.
 
 Compile with
 
