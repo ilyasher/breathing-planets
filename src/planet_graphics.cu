@@ -17,7 +17,7 @@
 #define MARS_WATER_LEVEL -1
 #define EARTH_SNOW_LEVEL 0.05
 
-__device__ static vec3_t lp = {-.7, .2, .7};
+__device__ static vec3_t lp = {-7, 2, 7};
 __constant__ float gpu_t_offset[1];
 
 #define INDEX(i, j, W) ((i) * (W) + (j))
@@ -104,34 +104,19 @@ __device__ static float gpu_lighting(float x, float y, float z, float t, int pla
         // In the shadow
         return AMBIENT;
     }
-
     vec3_t grad;
     gpu_grad_sdf(&grad, x, y, z, t, planet);
-    // float delta = 1e-3;
-    // float p0 = gpu_sdf(1, 0, 0, 0);
-    // float p0 = gpu_sdf(ray.x, ray.y, ray.z, t);
-    // float p0 = gpu_sdf(x, y, z, t);
-    // float px = gpu_sdf(x+delta, y, z, t);
-    // float py = gpu_sdf(x, y+delta, z, t);
-    // float pz = gpu_sdf(x, y, z+delta, t);
-    // grad.x = (px - p0) / delta;
-    // grad.y = (py - p0) / delta;
-    // grad.z = (pz - p0) / delta;
-    // gpu_normalize(&grad);
 
     float diffuse = -ld.x*grad.x - ld.y*grad.y - ld.z*grad.z;
     diffuse = diffuse > 0 ? diffuse : 0;
-
-    // float specular = grad.z > 0 ? grad.z : 0;
-    // specular = pow(specular, 256);
 
     return AMBIENT + 0.9 * diffuse;
 }
 
 __device__ static int gpu_earth_color_function(float x, float y, float z, float t, int is_png) {
-    // float light = gpu_lighting(x, y, z, t);
+    float light = gpu_lighting(x, y, z, t, 0);
 
-    float light = 0.5;
+    // float light = 0.5;
     float n = gpu_surface_height(x, y, z, t, 0);
 
     if (n < EARTH_WATER_LEVEL) {
@@ -161,8 +146,7 @@ __device__ static int gpu_earth_color_function(float x, float y, float z, float 
 }
 
 __device__ static int gpu_mars_color_function(float x, float y, float z, float t, int is_png) {
-    // float light = lighting(x, y, z, t);
-    float light = 0.5;
+    float light = gpu_lighting(x, y, z, t, 1);
     float n = gpu_surface_height(x, y, z, t, 1);
     if (is_png) {
         float intensity = (800+n*10000) * light;
@@ -180,7 +164,7 @@ __device__ static int gpu_mars_color_function(float x, float y, float z, float t
 
 __global__ void make_zs_kernel(float *d_zs, uint8_t *d_zs_valid, int W, int H, float t, int planet) {
     int i = threadIdx.x + 32 * blockIdx.x;
-    int j = threadIdx.y + 32 * blockIdx.y;
+    int j = threadIdx.y + 16 * blockIdx.y;
 
     float x = (j - W/2)/(float)H;
     float y = (i - H/2)/(float)H;
@@ -196,7 +180,7 @@ __global__ void make_zs_kernel(float *d_zs, uint8_t *d_zs_valid, int W, int H, f
 
 __global__ void fill_texture_kernel(void *d_pixels, float *d_zs, uint8_t *d_zs_valid, int W, int H, float t, int is_png, int planet) {
     int i = threadIdx.x + 32 * blockIdx.x;
-    int j = threadIdx.y + 32 * blockIdx.y;
+    int j = threadIdx.y + 16 * blockIdx.y;
 
     if (!d_zs_valid[INDEX(i, j, W)]) {
         if (is_png) {
@@ -237,8 +221,8 @@ void cuda_draw_planet(void *pixels, int W, int H, float t, int is_png, int plane
 
     cudaMemcpyToSymbol(gpu_t_offset, &offset, sizeof(float));
 
-    dim3 blockSize(32, 32);
-    dim3 gridSize(W / 32, H / 32); // TODO: check
+    dim3 blockSize(32, 16);
+    dim3 gridSize(H / 32, W / 16); // TODO: check
 
     make_zs_kernel<<<gridSize, blockSize>>>(d_zs, d_zs_valid, W, H, t, planet);
 
