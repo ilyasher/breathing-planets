@@ -46,3 +46,8 @@ The planet is rendered using a technique called ray-marching. The planet is desc
 `SDF(x, y, z, t)` for the planets was constructed as follows. First, project `(x, y, z)` downwards onto the surface of a sphere of some radius `R` to get a new point `(x', y', z')`. If the planet is smooth, then the SDF is simply the distance to this projected point. We make the planet's surface rough by adding `Noise(x', y', z', t)` to this "smooth" SDF, where `Noise` is 4-dimensional Simplex noise summed at different frequencies and amplitudes. By increasing the time coordinate with every frame, the planet's surface evolves very gradually and naturally, thanks to the magic of Simplex noise.
 
 Lighting is the standard ambient + diffuse, with additional raytracing to create shadows from mountains.
+
+=========================
+
+![Earth Terrain Closeup](/imgs/large_earth_closeup.png "Earth Terrain Closeup")
+
