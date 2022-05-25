@@ -34,3 +34,14 @@ Program usage:
 
 ![Mars PNG](/imgs/mars_large.png "Rendered Mars")
 
+# GPU vs CPU
+
+The program runs much faster on the GPU than on the CPU. Rendering a 4096x4096 PNG took 445 seconds when done on the CPU,
+but only 2.1 seconds on the GPU, a 200x improvement. Rendering a 256x256 100-frame GIF took 212 seconds on the CPU, but only 2.2 seconds on the GPU, a 100x improvement.
+
+# How it Works
+
+The planet is rendered using a technique called ray-marching. The planet is described by a 4D function called a Signed Distance Function, or a SDF for short. The first 3 inputs are spatial `(x, y, z)` coordinates, and the fourth input is a time coordinate. As the name implies, the SDF gives the distance of a point from the surface of the planet. If `SDF(x, y, z, t) < 0`, then `(x, y, z)` is inside the planet at time `t`. If `SDF(x, y, z, t) = 0`, then `(x, y, z)` is on the planet's surface at time `t`. And if `SDF(x, y, z, t) < 0`, then `(x, y, z)` is outside of the planet at time `t`. Once the SDF is constructed, ray-marching is performed as follows: Point a ray towards the planet. Iteratively move it forward by `SDF(x, y, z, t)` where `(x, y, z)` is the ray's current position. If after a while `SDF(x, y, z, t)` is close to 0, then the ray hit the planet at point `(x, y, z)`, otherwise the ray misses the planet.
+
+`SDF(x, y, z, t)` for the planets was constructed as follows. First, project `(x, y, z)` downwards onto the surface of a sphere of some radius `R` to get a new point `(x', y', z')`. If the planet is smooth, then the SDF is simply the distance to this projected point. We make the planet's surface rough by adding `Noise(x', y', z', t)` to this "smooth" SDF, where `Noise` is 4-dimensional Simplex noise summed at different frequencies and amplitudes. By increasing the time coordinate with every frame, the planet's surface evolves very gradually and naturally, thanks to the magic of Simplex noise.
+
