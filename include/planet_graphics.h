@@ -21,14 +21,11 @@ typedef struct vec3_t {
 } vec3_t;
 void normalize(vec3_t* v);
 
-// extern float water_level;
-// extern float (*height_function)(float);
-// extern int   (*color_function)(float, float, float, float, int);
-// extern float seed;
-
+float lighting(float x, float y, float z, float t, int planet);
+float surface_height(float x, float y, float z, float t, int planet);
 
 // Do the ray marching for every x, y and fill z values in zs
-void make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t, int planet);
+void make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t, int planet, float offset);
 
 //
 void fill_texture(void *pixels, // either png object or gif frame
@@ -38,6 +35,7 @@ void fill_texture(void *pixels, // either png object or gif frame
                   int H,
                   float t,
                   int is_png,
-                  int planet);
+                  int planet,
+                  float offset);
 
 #endif // PLANET_GRAPHICS_H

@@ -19,6 +19,11 @@ void usage(char *progname) {
     exit(1);
 }
 
+float get_offset_from_seed(int seed) {
+    srand(seed);
+    return 1000 * (rand() / (float) RAND_MAX);
+}
+
 int main(int argc, char *argv[])
 {
     int width = 256;
@@ -29,6 +34,7 @@ int main(int argc, char *argv[])
     int do_png = 1;
     int do_gpu = 1;
     int n_frames = 10;
+    int seed = 0;
 
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "-w")) {
@@ -61,15 +67,7 @@ int main(int argc, char *argv[])
     }
     if (!filename_found) usage(argv[0]);
 
-    if (planet == 0) {
-        height_function = earth_height_function;
-        color_function = earth_color_function;
-        water_level = EARTH_WATER_LEVEL;
-    } else {
-        height_function = mars_height_function;
-        color_function = mars_color_function;
-        water_level = MARS_WATER_LEVEL;
-    }
+    float offset = get_offset_from_seed(seed);
 
     // Array of z positions for every x, y
     float *zs;
@@ -89,10 +87,10 @@ int main(int argc, char *argv[])
 
         float t = 0; // arbitrary
         if (do_gpu) {
-            cuda_draw_planet(png->data, width, height, t, do_png, planet);
+            cuda_draw_planet(png->data, width, height, t, do_png, planet, offset);
         } else {
-            make_zs(zs, zs_valid, width, height, t, planet);
-            fill_texture(png, zs, zs_valid, width, height, t, do_png, planet);
+            make_zs(zs, zs_valid, width, height, t, planet, offset);
+            fill_texture(png, zs, zs_valid, width, height, t, do_png, planet, offset);
         }
         libattopng_save(png, filename);
         libattopng_destroy(png);
@@ -111,10 +109,10 @@ int main(int argc, char *argv[])
             float t = f / 40.;
 
             if (do_gpu) {
-                cuda_draw_planet(pixels, width, height, t, do_png, planet);
+                cuda_draw_planet(pixels, width, height, t, do_png, planet, offset);
             } else {
-                make_zs(zs, zs_valid, width, height, t, planet);
-                fill_texture(pixels, zs, zs_valid, width, height, t, do_png, planet);
+                make_zs(zs, zs_valid, width, height, t, planet, offset);
+                fill_texture(pixels, zs, zs_valid, width, height, t, do_png, planet, offset);
             }
 
             // Necessary to do for every frame separately

@@ -17,17 +17,12 @@ vec3_t lp = {-7, 2, 7};
 
 #define INDEX(i, j, W) ((i) * (W) + (j))
 
-float water_level = -1;
-float (*height_function)(float) = mars_height_function;
-int   (*color_function)(float, float, float, float, int) = mars_color_function;
-float seed = 0;
-
 // Simplex noise added up at a few octaves
-float noise(float x, float y, float z, float t) {
+float noise(float x, float y, float z, float t, int planet) {
 
     float x_rot = x*cos(ROTATION_FREQ * t) - z*sin(ROTATION_FREQ * t);
     float z_rot = x*sin(ROTATION_FREQ * t) + z*cos(ROTATION_FREQ * t);
-    float y_rot = y + seed;
+    float y_rot = y;
 
     float power = 1;
     float n = 0;
@@ -36,19 +31,24 @@ float noise(float x, float y, float z, float t) {
         power /= 2.2;
     }
 
-    n = height_function(n);
+    if (planet == 0) {
+        n = earth_height_function(n);
+    } else {
+        n = mars_height_function(n);
+    }
     return n;
 }
 
-float surface_height(float x, float y, float z, float t) {
+float surface_height(float x, float y, float z, float t, int planet) {
     float norm = sqrt(x*x+y*y+z*z);
-    float height = HEIGHT_AMP*noise(R*x/norm, R*y/norm, R*z/norm, t);
+    float height = HEIGHT_AMP*noise(R*x/norm, R*y/norm, R*z/norm, t, planet);
     return height;
 }
 
-float sdf(float x, float y, float z, float t) {
+float sdf(float x, float y, float z, float t, int planet) {
     float norm = sqrt(x*x+y*y+z*z);
-    float h = surface_height(x, y, z, t);
+    float h = surface_height(x, y, z, t, planet);
+    int water_level = planet == 0 ? EARTH_WATER_LEVEL : MARS_WATER_LEVEL;
     return norm - (R + (h > water_level ? h : water_level));
 }
 
@@ -59,12 +59,12 @@ void normalize(vec3_t* v) {
     v->z /= norm;
 }
 
-void grad_sdf(vec3_t *grad, float x, float y, float z, float t) {
+void grad_sdf(vec3_t *grad, float x, float y, float z, float t, int planet) {
     float delta = 1e-3;
-    float p0 = sdf(x, y, z, t);
-    float px = sdf(x+delta, y, z, t);
-    float py = sdf(x, y+delta, z, t);
-    float pz = sdf(x, y, z+delta, t);
+    float p0 = sdf(x, y, z, t, planet);
+    float px = sdf(x+delta, y, z, t, planet);
+    float py = sdf(x, y+delta, z, t, planet);
+    float pz = sdf(x, y, z+delta, t, planet);
     grad->x = (px - p0) / delta;
     grad->y = (py - p0) / delta;
     grad->z = (pz - p0) / delta;
@@ -73,15 +73,15 @@ void grad_sdf(vec3_t *grad, float x, float y, float z, float t) {
 
 // Given x, y, find which z is at the planet's surface
 // (try find z such that f(x, y, z, t) = 0)
-float ray_march_z(float x, float y, float z, float t) {
+float ray_march_z(float x, float y, float z, float t, int planet) {
     for (int i = 0; i < 32; i++) {
-        z = z - sdf(x, y, z, t);
+        z = z - sdf(x, y, z, t, planet);
     }
     return z;
 }
 
 // Return number 0-1 representing how much lighting the point has.
-float lighting(float x, float y, float z, float t) {
+float lighting(float x, float y, float z, float t, int planet) {
 
     float ambient = 0.1;
 
@@ -89,7 +89,7 @@ float lighting(float x, float y, float z, float t) {
     vec3_t ld = {x-ray.x, y-ray.y, z-ray.z};
     normalize(&ld);
     for (int i = 0; i < 32; i++) {
-        float dist = sdf(ray.x, ray.y, ray.z, t);
+        float dist = sdf(ray.x, ray.y, ray.z, t, planet);
         ray.x += dist*ld.x;
         ray.y += dist*ld.y;
         ray.z += dist*ld.z;
@@ -101,7 +101,7 @@ float lighting(float x, float y, float z, float t) {
     }
 
     vec3_t grad;
-    grad_sdf(&grad, x, y, z, t);
+    grad_sdf(&grad, x, y, z, t, planet);
 
     float diffuse = -ld.x*grad.x - ld.y*grad.y - ld.z*grad.z;
     diffuse = diffuse > 0 ? diffuse : 0;
@@ -113,24 +113,25 @@ float lighting(float x, float y, float z, float t) {
 }
 
 // Do the raytracing for every x, y and fill z values in zs
-void make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t, int planet) {
+void make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t, int planet, float offset) {
     for (int i = 0; i < H; i++) {
         for (int j = 0; j < W; j++) {
             float x = (j - W/2)/(float)H;
-            float y = (i - H/2)/(float)H;
+            float y = (i - H/2)/(float)H + offset;
             float rrxxyy = R*R-x*x+y*y;
             float z = 0;
             if (rrxxyy > 0) {
                 z = sqrt(rrxxyy);
             }
-            z = ray_march_z(x, y, z, t);
+            z = ray_march_z(x, y, z, t, planet);
             zs[INDEX(i, j, W)] = z;
-            zs_valid[INDEX(i, j, W)] = (fabs(sdf(x, y, z, t)) < 1e-2);
+            zs_valid[INDEX(i, j, W)] = (fabs(sdf(x, y, z, t, planet)) < 1e-2);
         }
     }
 }
 
-void fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, float t, int is_png, int planet) {
+void fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, float t, int is_png, int planet, float offset) {
+    int (*color_function)(float, float, float, float, int) = planet == 0 ? earth_color_function : mars_color_function;
     for (int i = 0; i < H; i++) {
         for (int j = 0; j < W; j++) {
             if (!zs_valid[INDEX(i, j, W)]) {
@@ -142,7 +143,7 @@ void fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, floa
                 continue;
             }
             float x = (j - W/2)/(float)H;
-            float y = (i - H/2)/(float)H;
+            float y = (i - H/2)/(float)H + offset;
             float z = zs[INDEX(i, j, W)];
             int color = color_function(x, y, z, t, is_png);
             if (is_png) {

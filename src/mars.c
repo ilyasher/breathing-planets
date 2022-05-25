@@ -9,8 +9,8 @@ float mars_height_function(float n) {
 }
 
 int mars_color_function(float x, float y, float z, float t, int is_png) {
-    float light = lighting(x, y, z, t);
-    float n = surface_height(x, y, z, t);
+    float light = lighting(x, y, z, t, 1);
+    float n = surface_height(x, y, z, t, 1);
     if (is_png) {
         float intensity = (800+n*10000) * light;
         if (intensity < 500) {

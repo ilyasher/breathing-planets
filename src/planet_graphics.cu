@@ -13,8 +13,8 @@
 #include "noise.cuh"
 #include "palette.cuh"
 
-#define WATER_LEVEL -0.005
-#define EARTH_WATER_LEVEL WATER_LEVEL
+#define EARTH_WATER_LEVEL -0.005
+#define MARS_WATER_LEVEL -1
 #define EARTH_SNOW_LEVEL 0.05
 
 __device__ static vec3_t lp = {-.7, .2, .7};
@@ -22,11 +22,11 @@ __device__ static vec3_t lp = {-.7, .2, .7};
 #define INDEX(i, j, W) ((i) * (W) + (j))
 
 // Simplex noise added up at a few octaves
-__device__ static float gpu_noise(float x, float y, float z, float t) {
+__device__ static float gpu_noise(float x, float y, float z, float t, int planet) {
 
     float x_rot = x*cos(ROTATION_FREQ * t) - z*sin(ROTATION_FREQ * t);
     float z_rot = x*sin(ROTATION_FREQ * t) + z*cos(ROTATION_FREQ * t);
-    float y_rot = y /*+ seed*/;
+    float y_rot = y;
 
     float power = 1;
     float n = 0;
@@ -35,21 +35,26 @@ __device__ static float gpu_noise(float x, float y, float z, float t) {
         power /= 2.2;
     }
 
-    // n = height_function(n);
-    n = n * sqrt(fabs(n));
+    if (planet == 0) {
+        n = n * sqrt(fabs(n));
+    } else {
+        n += 0.3;
+        n = -0.5/(500*n*n+4);
+    }
     return n;
 }
 
-__device__ static float gpu_surface_height(float x, float y, float z, float t) {
+__device__ static float gpu_surface_height(float x, float y, float z, float t, int planet) {
     float norm = sqrt(x*x+y*y+z*z);
-    float height = HEIGHT_AMP*gpu_noise(R*x/norm, R*y/norm, R*z/norm, t);
+    float height = HEIGHT_AMP*gpu_noise(R*x/norm, R*y/norm, R*z/norm, t, planet);
     return height;
 }
 
-__device__ static float gpu_sdf(float x, float y, float z, float t) {
+__device__ static float gpu_sdf(float x, float y, float z, float t, int planet) {
     float norm = sqrt(x*x+y*y+z*z);
-    float h = gpu_surface_height(x, y, z, t);
-    return norm - (R + (h > WATER_LEVEL ? h : WATER_LEVEL));
+    float h = gpu_surface_height(x, y, z, t, planet);
+    float water_level = planet == 0 ? EARTH_WATER_LEVEL : MARS_WATER_LEVEL;
+    return norm - (R + (h > water_level ? h : water_level));
 }
 
 __device__ static void gpu_normalize(vec3_t* v) {
@@ -59,12 +64,12 @@ __device__ static void gpu_normalize(vec3_t* v) {
     v->z /= norm;
 }
 
-__device__ static void gpu_grad_sdf(vec3_t *grad, float x, float y, float z, float t) {
+__device__ static void gpu_grad_sdf(vec3_t *grad, float x, float y, float z, float t, int planet) {
     float delta = 1e-3;
-    float p0 = gpu_sdf(x, y, z, t);
-    float px = gpu_sdf(x+delta, y, z, t);
-    float py = gpu_sdf(x, y+delta, z, t);
-    float pz = gpu_sdf(x, y, z+delta, t);
+    float p0 = gpu_sdf(x, y, z, t, planet);
+    float px = gpu_sdf(x+delta, y, z, t, planet);
+    float py = gpu_sdf(x, y+delta, z, t, planet);
+    float pz = gpu_sdf(x, y, z+delta, t, planet);
     grad->x = (px - p0) / delta;
     grad->y = (py - p0) / delta;
     grad->z = (pz - p0) / delta;
@@ -73,9 +78,9 @@ __device__ static void gpu_grad_sdf(vec3_t *grad, float x, float y, float z, flo
 
 // Given x, y, find which z is at the planet's surface
 // (try find z such that f(x, y, z, t) = 0)
-__device__ static float gpu_ray_march_z(float x, float y, float z, float t) {
+__device__ static float gpu_ray_march_z(float x, float y, float z, float t, int planet) {
     for (int i = 0; i < 32; i++) {
-        z = z - gpu_sdf(x, y, z, t);
+        z = z - gpu_sdf(x, y, z, t, planet);
     }
     return z;
 }
@@ -83,13 +88,13 @@ __device__ static float gpu_ray_march_z(float x, float y, float z, float t) {
 #define AMBIENT 0.1
 
 // Return number 0-1 representing how much lighting the point has.
-__device__ static float gpu_lighting(float x, float y, float z, float t) {
+__device__ static float gpu_lighting(float x, float y, float z, float t, int planet) {
 
     vec3_t ray = {lp.x * cos(t), lp.y, lp.z -14*sin(t)};
     vec3_t ld = {x-ray.x, y-ray.y, z-ray.z};
     gpu_normalize(&ld);
     for (int i = 0; i < 32; i++) {
-        float dist = gpu_sdf(ray.x, ray.y, ray.z, t);
+        float dist = gpu_sdf(ray.x, ray.y, ray.z, t, planet);
         ray.x += dist*ld.x;
         ray.y += dist*ld.y;
         ray.z += dist*ld.z;
@@ -100,7 +105,7 @@ __device__ static float gpu_lighting(float x, float y, float z, float t) {
     }
 
     vec3_t grad;
-    gpu_grad_sdf(&grad, x, y, z, t);
+    gpu_grad_sdf(&grad, x, y, z, t, planet);
     // float delta = 1e-3;
     // float p0 = gpu_sdf(1, 0, 0, 0);
     // float p0 = gpu_sdf(ray.x, ray.y, ray.z, t);
@@ -126,7 +131,7 @@ __device__ static int gpu_earth_color_function(float x, float y, float z, float 
     // float light = gpu_lighting(x, y, z, t);
 
     float light = 1;
-    float n = gpu_surface_height(x, y, z, t);
+    float n = gpu_surface_height(x, y, z, t, 0);
 
     if (n < EARTH_WATER_LEVEL) {
         if (is_png) {
@@ -154,43 +159,41 @@ __device__ static int gpu_earth_color_function(float x, float y, float z, float 
     // return RGB(255, 0, 0);
 }
 
-__global__ void make_zs_kernel(float *d_zs, uint8_t *d_zs_valid, int W, int H, float t) {
+__device__ static int gpu_mars_color_function(float x, float y, float z, float t, int is_png) {
+    // float light = lighting(x, y, z, t);
+    float light = 1;
+    float n = gpu_surface_height(x, y, z, t, 1);
+    if (is_png) {
+        float intensity = (800+n*10000) * light;
+        if (intensity < 500) {
+            int c = CAPAT(intensity / 500. * 255., 0, 255);
+            return RGB(c, 0, 0);
+        } else {
+            int c = CAPAT((intensity-500) / 500. * 255., 0, 255);
+            return RGB(255, c, c);
+        }
+    }
+    // else is gif
+    return RED_TABLE_GPU[CAPAT((int)(light * (50 + 64*20*n)), 0, 63)];
+}
+
+__global__ void make_zs_kernel(float *d_zs, uint8_t *d_zs_valid, int W, int H, float t, int planet, float offset) {
     int i = threadIdx.x + 32 * blockIdx.x;
     int j = threadIdx.y + 32 * blockIdx.y;
 
     float x = (j - W/2)/(float)H;
-    float y = (i - H/2)/(float)H;
+    float y = (i - H/2)/(float)H + offset;
     float rrxxyy = R*R-x*x+y*y;
     float z = 0;
     if (rrxxyy > 0) {
         z = sqrt(rrxxyy);
     }
-    z = gpu_ray_march_z(x, y, z, t);
+    z = gpu_ray_march_z(x, y, z, t, planet);
     d_zs[INDEX(i, j, W)] = z;
-    d_zs_valid[INDEX(i, j, W)] = (fabs(gpu_sdf(x, y, z, t)) < 1e-2);
+    d_zs_valid[INDEX(i, j, W)] = (fabs(gpu_sdf(x, y, z, t, planet)) < 1e-2);
 }
 
-// Do the raytracing for every x, y and fill z values in zs
-void cuda_make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t) {
-    float   *d_zs;
-    uint8_t *d_zs_valid;
-    CUDA_CALL( cudaMalloc(&d_zs, W*H*sizeof(float)) );
-    CUDA_CALL( cudaMalloc(&d_zs_valid, W*H*sizeof(uint8_t)) );
-
-    cudaMemcpyToSymbol(gpu_perm, perm, 512*sizeof(unsigned char));
-
-    dim3 blockSize(32, 32);
-    dim3 gridSize(W / 32, H / 32); // TODO: check
-
-    make_zs_kernel<<<gridSize, blockSize>>>(d_zs, d_zs_valid, W, H, t);
-
-    CUDA_CALL( cudaMemcpy(zs, d_zs, W*H*sizeof(float), cudaMemcpyDeviceToHost) );
-    CUDA_CALL( cudaMemcpy(zs_valid, d_zs_valid, W*H*sizeof(uint8_t), cudaMemcpyDeviceToHost) );
-    CUDA_CALL( cudaFree(d_zs) );
-    CUDA_CALL( cudaFree(d_zs_valid) );
-}
-
-__global__ void fill_texture_kernel(void *d_pixels, float *d_zs, uint8_t *d_zs_valid, int W, int H, float t, int is_png) {
+__global__ void fill_texture_kernel(void *d_pixels, float *d_zs, uint8_t *d_zs_valid, int W, int H, float t, int is_png, int planet) {
     int i = threadIdx.x + 32 * blockIdx.x;
     int j = threadIdx.y + 32 * blockIdx.y;
 
@@ -207,7 +210,10 @@ __global__ void fill_texture_kernel(void *d_pixels, float *d_zs, uint8_t *d_zs_v
     float x = (j - W/2)/(float)H;
     float y = (i - H/2)/(float)H;
     float z = d_zs[INDEX(i, j, W)];
-    int color = gpu_earth_color_function(x, y, z, t, is_png);
+
+    int color = planet == 0
+              ? gpu_earth_color_function(x, y, z, t, is_png)
+              : gpu_mars_color_function (x, y, z, t, is_png);
 
     if (is_png) {
         ((uint32_t *) d_pixels)[j + i * W] = color;
@@ -216,41 +222,7 @@ __global__ void fill_texture_kernel(void *d_pixels, float *d_zs, uint8_t *d_zs_v
     }
 }
 
-void cuda_fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, float t, int is_png) {
-    float   *d_zs;
-    uint8_t *d_zs_valid;
-    CUDA_CALL( cudaMalloc(&d_zs, W*H*sizeof(float)) );
-    CUDA_CALL( cudaMalloc(&d_zs_valid, W*H*sizeof(uint8_t)) );
-    CUDA_CALL( cudaMemcpy(d_zs, zs, W*H*sizeof(float), cudaMemcpyHostToDevice) );
-    CUDA_CALL( cudaMemcpy(d_zs_valid, zs_valid, W*H*sizeof(uint8_t), cudaMemcpyHostToDevice) );
-
-    cudaMemcpyToSymbol(gpu_perm, perm, 512*sizeof(unsigned char));
-    cudaMemcpyToSymbol(GREY_TABLE_GPU, GREY_TABLE, sizeof(GREY_TABLE));
-    cudaMemcpyToSymbol(RED_TABLE_GPU, RED_TABLE, sizeof(RED_TABLE));
-    cudaMemcpyToSymbol(GREEN_TABLE_GPU, GREEN_TABLE, sizeof(GREEN_TABLE));
-    cudaMemcpyToSymbol(BLUE_TABLE_GPU, BLUE_TABLE, sizeof(BLUE_TABLE));
-
-    dim3 blockSize(32, 32);
-    dim3 gridSize(W / 32, H / 32);
-    if (is_png) {
-        uint32_t *d_pixels;
-        CUDA_CALL( cudaMalloc(&d_pixels, W*H*sizeof(uint32_t)) );
-        fill_texture_kernel<<<gridSize, blockSize>>>(d_pixels, d_zs, d_zs_valid, W, H, t, is_png);
-        CUDA_CALL( cudaMemcpy(pixels, d_pixels, W*H*sizeof(uint32_t), cudaMemcpyDeviceToHost) );
-        CUDA_CALL( cudaFree(d_pixels) );
-    } else {
-        uint8_t *d_pixels;
-        CUDA_CALL( cudaMalloc(&d_pixels, W*H*sizeof(uint8_t)) );
-        fill_texture_kernel<<<gridSize, blockSize>>>(d_pixels, d_zs, d_zs_valid, W, H, t, is_png);
-        CUDA_CALL( cudaMemcpy(pixels, d_pixels, W*H*sizeof(uint8_t), cudaMemcpyDeviceToHost) );
-        CUDA_CALL( cudaFree(d_pixels) );
-    }
-
-    CUDA_CALL( cudaFree(d_zs) );
-    CUDA_CALL( cudaFree(d_zs_valid) );
-}
-
-void cuda_draw_planet(void *pixels, int W, int H, float t, int is_png) {
+void cuda_draw_planet(void *pixels, int W, int H, float t, int is_png, int planet, float offset) {
     float   *d_zs;
     uint8_t *d_zs_valid;
     CUDA_CALL( cudaMalloc(&d_zs, W*H*sizeof(float)) );
@@ -265,18 +237,18 @@ void cuda_draw_planet(void *pixels, int W, int H, float t, int is_png) {
     dim3 blockSize(32, 32);
     dim3 gridSize(W / 32, H / 32); // TODO: check
 
-    make_zs_kernel<<<gridSize, blockSize>>>(d_zs, d_zs_valid, W, H, t);
+    make_zs_kernel<<<gridSize, blockSize>>>(d_zs, d_zs_valid, W, H, t, planet, offset);
 
     if (is_png) {
         uint32_t *d_pixels;
         CUDA_CALL( cudaMalloc(&d_pixels, W*H*sizeof(uint32_t)) );
-        fill_texture_kernel<<<gridSize, blockSize>>>(d_pixels, d_zs, d_zs_valid, W, H, t, is_png);
+        fill_texture_kernel<<<gridSize, blockSize>>>(d_pixels, d_zs, d_zs_valid, W, H, t, is_png, planet);
         CUDA_CALL( cudaMemcpy(pixels, d_pixels, W*H*sizeof(uint32_t), cudaMemcpyDeviceToHost) );
         CUDA_CALL( cudaFree(d_pixels) );
     } else {
         uint8_t *d_pixels;
         CUDA_CALL( cudaMalloc(&d_pixels, W*H*sizeof(uint8_t)) );
-        fill_texture_kernel<<<gridSize, blockSize>>>(d_pixels, d_zs, d_zs_valid, W, H, t, is_png);
+        fill_texture_kernel<<<gridSize, blockSize>>>(d_pixels, d_zs, d_zs_valid, W, H, t, is_png, planet);
         CUDA_CALL( cudaMemcpy(pixels, d_pixels, W*H*sizeof(uint8_t), cudaMemcpyDeviceToHost) );
         CUDA_CALL( cudaFree(d_pixels) );
     }

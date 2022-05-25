@@ -10,8 +10,8 @@ float earth_height_function(float n) {
 }
 
 int earth_color_function(float x, float y, float z, float t, int is_png) {
-    float light = lighting(x, y, z, t);
-    float n = surface_height(x, y, z, t);
+    float light = lighting(x, y, z, t, 0);
+    float n = surface_height(x, y, z, t, 0);
 
     if (n < EARTH_WATER_LEVEL) {
         if (is_png) {
