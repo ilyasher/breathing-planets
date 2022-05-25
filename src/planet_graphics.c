@@ -13,12 +13,6 @@
 #include "earth.h"
 #include "planet_graphics.h"
 
-float HEIGHT_AMP = 0.1;
-
-// float WATER_LEVEL = -0.005;
-
-float rotation_freq = -0.7;
-
 vec3_t lp = {-7, 2, 7};
 
 #define INDEX(i, j, W) ((i) * (W) + (j))
@@ -31,8 +25,8 @@ float seed = 0;
 // Simplex noise added up at a few octaves
 float noise(float x, float y, float z, float t) {
 
-    float x_rot = x*cos(rotation_freq * t) - z*sin(rotation_freq * t);
-    float z_rot = x*sin(rotation_freq * t) + z*cos(rotation_freq * t);
+    float x_rot = x*cos(ROTATION_FREQ * t) - z*sin(ROTATION_FREQ * t);
+    float z_rot = x*sin(ROTATION_FREQ * t) + z*cos(ROTATION_FREQ * t);
     float y_rot = y + seed;
 
     float power = 1;
@@ -119,7 +113,7 @@ float lighting(float x, float y, float z, float t) {
 }
 
 // Do the raytracing for every x, y and fill z values in zs
-void make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t) {
+void make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t, int planet) {
     for (int i = 0; i < H; i++) {
         for (int j = 0; j < W; j++) {
             float x = (j - W/2)/(float)H;
@@ -136,7 +130,7 @@ void make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t) {
     }
 }
 
-void fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, float t, int is_png) {
+void fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, float t, int is_png, int planet) {
     for (int i = 0; i < H; i++) {
         for (int j = 0; j < W; j++) {
             if (!zs_valid[INDEX(i, j, W)]) {

@@ -28,6 +28,8 @@
  *
  */
 
+extern unsigned char perm[];
+
 /** 1D, 2D, 3D and 4D float Perlin noise
  */
 extern float noise1( float x );

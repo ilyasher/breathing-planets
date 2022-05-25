@@ -14,7 +14,7 @@
 #include "planet_graphics.cuh"
 
 void usage(char *progname) {
-    printf("usage: %s out_file [--mars] [--earth] [-w <width>] [-h <height>] [--gif <n_frames>] [--seed <seed>]\n"
+    printf("usage: %s out_file [--mars] [--earth] [-w <width>] [-h <height>] [--gif <n_frames>] [--seed <seed>] [--cpu]\n"
            "example: %s mars_movie.gif --mars -w 512 -h 512 --gif 64\n", progname, progname);
     exit(1);
 }
@@ -26,7 +26,8 @@ int main(int argc, char *argv[])
     int planet = 0; // 0 = earth, 1 = mars
     char *filename;
     int filename_found = 0;
-    int do_gif = 0;
+    int do_png = 1;
+    int do_gpu = 1;
     int n_frames = 10;
 
     for (int i = 1; i < argc; i++) {
@@ -41,12 +42,14 @@ int main(int argc, char *argv[])
         } else if (!strcmp(argv[i], "--earth")) {
             planet = 0;
         } else if (!strcmp(argv[i], "--gif")) {
-            do_gif = 1;
+            do_png = 0;
             i++;
             n_frames = atoi(argv[i]);
         } else if (!strcmp(argv[i], "--seed")) {
             i++;
             seed = atoi(argv[i]); // declared in planet_graphics.h
+        } else if (!strcmp(argv[i], "--cpu")) {
+            do_gpu = 0;
         } else {
             if (!filename_found) {
                 filename_found = 1;
@@ -69,22 +72,28 @@ int main(int argc, char *argv[])
     }
 
     // Array of z positions for every x, y
-    float *zs = malloc(sizeof(float) * width * height);
+    float *zs;
 
     // Array of whether z position is valid for every x, y
     // Invalid z positions occur either when the x, y corresponds to
     // outer space, or when the raytracing messes up.
-    uint8_t *zs_valid = malloc(sizeof(uint8_t) * width * height);
+    uint8_t *zs_valid;
 
+    if (!do_gpu) {
+        zs = malloc(sizeof(float) * width * height);
+        zs_valid = malloc(sizeof(uint8_t) * width * height);
+    }
 
-    if (!do_gif) {
+    if (do_png) {
         libattopng_t *png = libattopng_new(width, height, PNG_RGB);
 
         float t = 0; // arbitrary
-        cuda_make_zs(zs, zs_valid, width, height, t);
-        // make_zs(zs, zs_valid, width, height, t);
-        // fill_texture(png, zs, zs_valid, width, height, t, 1);
-        cuda_fill_texture(png->data, zs, zs_valid, width, height, t, 1);
+        if (do_gpu) {
+            cuda_draw_planet(png->data, width, height, t, do_png, planet);
+        } else {
+            make_zs(zs, zs_valid, width, height, t, planet);
+            fill_texture(png, zs, zs_valid, width, height, t, do_png, planet);
+        }
         libattopng_save(png, filename);
         libattopng_destroy(png);
     }
@@ -100,8 +109,13 @@ int main(int argc, char *argv[])
         for (int f = 0; f < n_frames; f++) {
             printf("%d/%d\n", f, n_frames);
             float t = f / 40.;
-            make_zs(zs, zs_valid, width, height, t);
-            fill_texture(pixels, zs, zs_valid, width, height, t, 0);
+
+            if (do_gpu) {
+                cuda_draw_planet(pixels, width, height, t, do_png, planet);
+            } else {
+                make_zs(zs, zs_valid, width, height, t, planet);
+                fill_texture(pixels, zs, zs_valid, width, height, t, do_png, planet);
+            }
 
             // Necessary to do for every frame separately
             memcpy(gif->frame, pixels, width*height*sizeof(uint8_t));
@@ -110,7 +124,11 @@ int main(int argc, char *argv[])
         ge_close_gif(gif);
         free(pixels);
     }
-    free(zs);
-    free(zs_valid);
+
+    if (!do_gpu) {
+        free(zs);
+        free(zs_valid);
+    }
+
 	return 0;
 }

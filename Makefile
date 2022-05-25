@@ -7,7 +7,7 @@
 CUDA_OBJ = cuda.o
 
 # Input Names
-CUDA_FILES = src/planet_graphics.cu
+CUDA_FILES = src/planet_graphics.cu src/noise.cu
 
 # ------------------------------------------------------------------------------
 
@@ -27,7 +27,7 @@ else
 NVCC_FLAGS := -m64
 endif
 NVCC_FLAGS += -g -dc -Wno-deprecated-gpu-targets --std=c++11 \
-             --expt-relaxed-constexpr
+             --expt-relaxed-constexpr -rdc=true
 NVCC_INCLUDE =
 NVCC_LIBS =
 NVCC_GENCODES = -gencode arch=compute_30,code=sm_30 \
@@ -40,7 +40,7 @@ NVCC_GENCODES = -gencode arch=compute_30,code=sm_30 \
 
 # CUDA Object Files
 # CUDA_OBJ_FILES = $(notdir $(addsuffix .o, $(CUDA_FILES)))
-CUDA_OBJ_FILES = obj/planet_graphics.cu.o
+CUDA_OBJ_FILES = obj/planet_graphics.cu.o obj/noise.cu.o
 
 # ------------------------------------------------------------------------------
 
