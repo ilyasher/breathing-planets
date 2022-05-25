@@ -20,8 +20,9 @@ void usage(char *progname) {
 }
 
 float get_offset_from_seed(int seed) {
+    if (seed == 0) return 0;
     srand(seed);
-    return 1000 * (rand() / (float) RAND_MAX);
+    return 100 * (rand() / (float) RAND_MAX - 0.5);
 }
 
 int main(int argc, char *argv[])
@@ -68,6 +69,8 @@ int main(int argc, char *argv[])
     if (!filename_found) usage(argv[0]);
 
     float offset = get_offset_from_seed(seed);
+    printf("offset: %f\n", offset);
+    // float offset = 0.1;
 
     // Array of z positions for every x, y
     float *zs;

@@ -4,7 +4,7 @@
 # 'make'        build executable file 'mycc'
 # 'make clean'  removes all .o and executable files
 
-CUDA_OBJ = cuda.o
+CUDA_OBJ = obj/cuda.o
 
 # Input Names
 CUDA_FILES = src/planet_graphics.cu src/noise.cu

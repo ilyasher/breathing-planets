@@ -14,6 +14,7 @@
 #include "planet_graphics.h"
 
 vec3_t lp = {-7, 2, 7};
+static float t_offset = 0;
 
 #define INDEX(i, j, W) ((i) * (W) + (j))
 
@@ -27,7 +28,7 @@ float noise(float x, float y, float z, float t, int planet) {
     float power = 1;
     float n = 0;
     for (int freq = 2; freq < 256; freq *= 2) {
-        n += power * noise4(x_rot*freq, y_rot*freq, z_rot*freq, t);
+        n += power * noise4(x_rot*freq, y_rot*freq, z_rot*freq, t+t_offset);
         power /= 2.2;
     }
 
@@ -82,7 +83,6 @@ float ray_march_z(float x, float y, float z, float t, int planet) {
 
 // Return number 0-1 representing how much lighting the point has.
 float lighting(float x, float y, float z, float t, int planet) {
-
     float ambient = 0.1;
 
     vec3_t ray = {lp.x * cos(t), lp.y, lp.z -14*sin(t)};
@@ -114,10 +114,11 @@ float lighting(float x, float y, float z, float t, int planet) {
 
 // Do the raytracing for every x, y and fill z values in zs
 void make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t, int planet, float offset) {
+    t_offset = offset;
     for (int i = 0; i < H; i++) {
         for (int j = 0; j < W; j++) {
             float x = (j - W/2)/(float)H;
-            float y = (i - H/2)/(float)H + offset;
+            float y = (i - H/2)/(float)H;
             float rrxxyy = R*R-x*x+y*y;
             float z = 0;
             if (rrxxyy > 0) {
@@ -131,6 +132,7 @@ void make_zs(float *zs, uint8_t *zs_valid, int W, int H, float t, int planet, fl
 }
 
 void fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, float t, int is_png, int planet, float offset) {
+    t_offset = offset;
     int (*color_function)(float, float, float, float, int) = planet == 0 ? earth_color_function : mars_color_function;
     for (int i = 0; i < H; i++) {
         for (int j = 0; j < W; j++) {
@@ -143,7 +145,7 @@ void fill_texture(void *pixels, float *zs, uint8_t *zs_valid, int W, int H, floa
                 continue;
             }
             float x = (j - W/2)/(float)H;
-            float y = (i - H/2)/(float)H + offset;
+            float y = (i - H/2)/(float)H;
             float z = zs[INDEX(i, j, W)];
             int color = color_function(x, y, z, t, is_png);
             if (is_png) {

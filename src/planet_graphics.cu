@@ -18,6 +18,7 @@
 #define EARTH_SNOW_LEVEL 0.05
 
 __device__ static vec3_t lp = {-.7, .2, .7};
+__constant__ float gpu_t_offset[1];
 
 #define INDEX(i, j, W) ((i) * (W) + (j))
 
@@ -31,7 +32,7 @@ __device__ static float gpu_noise(float x, float y, float z, float t, int planet
     float power = 1;
     float n = 0;
     for (int freq = 2; freq < 256; freq *= 2) {
-        n += power * gpu_noise4(x_rot*freq, y_rot*freq, z_rot*freq, t);
+        n += power * gpu_noise4(x_rot*freq, y_rot*freq, z_rot*freq, t+gpu_t_offset[0]);
         power /= 2.2;
     }
 
@@ -130,7 +131,7 @@ __device__ static float gpu_lighting(float x, float y, float z, float t, int pla
 __device__ static int gpu_earth_color_function(float x, float y, float z, float t, int is_png) {
     // float light = gpu_lighting(x, y, z, t);
 
-    float light = 1;
+    float light = 0.5;
     float n = gpu_surface_height(x, y, z, t, 0);
 
     if (n < EARTH_WATER_LEVEL) {
@@ -161,7 +162,7 @@ __device__ static int gpu_earth_color_function(float x, float y, float z, float 
 
 __device__ static int gpu_mars_color_function(float x, float y, float z, float t, int is_png) {
     // float light = lighting(x, y, z, t);
-    float light = 1;
+    float light = 0.5;
     float n = gpu_surface_height(x, y, z, t, 1);
     if (is_png) {
         float intensity = (800+n*10000) * light;
@@ -177,12 +178,12 @@ __device__ static int gpu_mars_color_function(float x, float y, float z, float t
     return RED_TABLE_GPU[CAPAT((int)(light * (50 + 64*20*n)), 0, 63)];
 }
 
-__global__ void make_zs_kernel(float *d_zs, uint8_t *d_zs_valid, int W, int H, float t, int planet, float offset) {
+__global__ void make_zs_kernel(float *d_zs, uint8_t *d_zs_valid, int W, int H, float t, int planet) {
     int i = threadIdx.x + 32 * blockIdx.x;
     int j = threadIdx.y + 32 * blockIdx.y;
 
     float x = (j - W/2)/(float)H;
-    float y = (i - H/2)/(float)H + offset;
+    float y = (i - H/2)/(float)H;
     float rrxxyy = R*R-x*x+y*y;
     float z = 0;
     if (rrxxyy > 0) {
@@ -234,10 +235,12 @@ void cuda_draw_planet(void *pixels, int W, int H, float t, int is_png, int plane
     cudaMemcpyToSymbol(GREEN_TABLE_GPU, GREEN_TABLE, sizeof(GREEN_TABLE));
     cudaMemcpyToSymbol(BLUE_TABLE_GPU, BLUE_TABLE, sizeof(BLUE_TABLE));
 
+    cudaMemcpyToSymbol(gpu_t_offset, &offset, sizeof(float));
+
     dim3 blockSize(32, 32);
     dim3 gridSize(W / 32, H / 32); // TODO: check
 
-    make_zs_kernel<<<gridSize, blockSize>>>(d_zs, d_zs_valid, W, H, t, planet, offset);
+    make_zs_kernel<<<gridSize, blockSize>>>(d_zs, d_zs_valid, W, H, t, planet);
 
     if (is_png) {
         uint32_t *d_pixels;
