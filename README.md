@@ -47,7 +47,7 @@ The planet is rendered using a technique called ray-marching. The planet is desc
 
 Lighting is the standard ambient + diffuse, with additional raytracing to create shadows from mountains.
 
-=========================
+_________________
 
 ![Earth Terrain Closeup](/imgs/large_earth_closeup.png "Earth Terrain Closeup")
 
